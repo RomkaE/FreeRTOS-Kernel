@@ -1,6 +1,8 @@
 /*
  * FreeRTOS Kernel <DEVELOPMENT BRANCH>
  * Copyright (C) 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2024 Arm Limited and/or its affiliates
+ * <open-source-office@arm.com>
  *
  * SPDX-License-Identifier: MIT
  *
@@ -54,7 +56,7 @@
  * The FreeRTOS Cortex M33 port can be configured to run on the Secure Side only
  * i.e. the processor boots as secure and never jumps to the non-secure side.
  * The Trust Zone support in the port must be disabled in order to run FreeRTOS
- * on the secure side. The following are the valid configuration seetings:
+ * on the secure side. The following are the valid configuration settings:
  *
  * 1. Run FreeRTOS on the Secure Side:
  *    configRUN_FREERTOS_SECURE_ONLY = 1 and configENABLE_TRUSTZONE = 0
@@ -110,6 +112,7 @@ typedef void ( * portISR_t )( void );
 #define portSCB_VTOR_REG                      ( *( ( portISR_t ** ) 0xe000ed08 ) )
 #define portSCB_SYS_HANDLER_CTRL_STATE_REG    ( *( ( volatile uint32_t * ) 0xe000ed24 ) )
 #define portSCB_MEM_FAULT_ENABLE_BIT          ( 1UL << 16UL )
+#define portSCB_USG_FAULT_ENABLE_BIT          ( 1UL << 18UL )
 /*-----------------------------------------------------------*/
 
 /**
@@ -373,6 +376,20 @@ typedef void ( * portISR_t )( void );
  * any secure calls.
  */
 #define portNO_SECURE_CONTEXT    0
+
+/**
+ * @brief Constants required to check and configure PACBTI security feature implementation.
+ */
+#if( ( configENABLE_PAC == 1 ) || ( configENABLE_BTI == 1 ) )
+
+    #define portID_ISAR5_REG         ( *( ( volatile uint32_t * ) 0xe000ed74 ) )
+
+    #define portCONTROL_UPAC_EN      ( 1UL << 7UL )
+    #define portCONTROL_PAC_EN       ( 1UL << 6UL )
+    #define portCONTROL_UBTI_EN      ( 1UL << 5UL )
+    #define portCONTROL_BTI_EN       ( 1UL << 4UL )
+
+#endif /* configENABLE_PAC == 1 || configENABLE_BTI == 1 */
 /*-----------------------------------------------------------*/
 
 /**
@@ -409,6 +426,26 @@ static void prvTaskExitError( void );
  */
     static void prvSetupFPU( void ) PRIVILEGED_FUNCTION;
 #endif /* configENABLE_FPU */
+
+#if( ( configENABLE_PAC == 1 ) || ( configENABLE_BTI == 1 ) )
+
+/**
+ * @brief Configures PACBTI features.
+ *
+ * This function configures the Pointer Authentication, and Branch Target
+ * Identification security features as per the user configuration. It returns
+ * the value of the special purpose CONTROL register accordingly, and optionally
+ * updates the CONTROL register value. Currently, only Cortex-M85 (ARMv8.1-M
+ * architecture based) target supports PACBTI security feature.
+ *
+ * @param xWriteControlRegister Used to control whether the special purpose
+ * CONTROL register should be updated or not.
+ *
+ * @return CONTROL register value according to the configured PACBTI option.
+ */
+    static uint32_t prvConfigurePACBTI( BaseType_t xWriteControlRegister );
+
+#endif /* configENABLE_PAC == 1 || configENABLE_BTI == 1 */
 
 /**
  * @brief Setup the timer to generate the tick interrupts.
@@ -1457,6 +1494,7 @@ void vPortSVCHandler_C( uint32_t * pulCallerStackAddress ) /* PRIVILEGED_FUNCTIO
                                          xMPU_SETTINGS * xMPUSettings ) /* PRIVILEGED_FUNCTION */
     {
         uint32_t ulIndex = 0;
+        uint32_t ulControl = 0x0;
 
         xMPUSettings->ulContext[ ulIndex ] = 0x04040404; /* r4. */
         ulIndex++;
@@ -1503,16 +1541,24 @@ void vPortSVCHandler_C( uint32_t * pulCallerStackAddress ) /* PRIVILEGED_FUNCTIO
         xMPUSettings->ulContext[ ulIndex ] = ( uint32_t ) pxEndOfStack;         /* PSPLIM. */
         ulIndex++;
 
+        #if( ( configENABLE_PAC == 1 ) || ( configENABLE_BTI == 1 ) )
+        {
+            /* Check PACBTI security feature configuration before pushing the
+             * CONTROL register's value on task's TCB. */
+            ulControl = prvConfigurePACBTI( pdFALSE );
+        }
+        #endif /* configENABLE_PAC == 1 || configENABLE_BTI == 1 */
+
         if( xRunPrivileged == pdTRUE )
         {
             xMPUSettings->ulTaskFlags |= portTASK_IS_PRIVILEGED_FLAG;
-            xMPUSettings->ulContext[ ulIndex ] = ( uint32_t ) portINITIAL_CONTROL_PRIVILEGED; /* CONTROL. */
+            xMPUSettings->ulContext[ ulIndex ] = ( ulControl | ( uint32_t ) portINITIAL_CONTROL_PRIVILEGED ); /* CONTROL. */
             ulIndex++;
         }
         else
         {
             xMPUSettings->ulTaskFlags &= ( ~portTASK_IS_PRIVILEGED_FLAG );
-            xMPUSettings->ulContext[ ulIndex ] = ( uint32_t ) portINITIAL_CONTROL_UNPRIVILEGED; /* CONTROL. */
+            xMPUSettings->ulContext[ ulIndex ] = ( ulControl | ( uint32_t ) portINITIAL_CONTROL_UNPRIVILEGED ); /* CONTROL. */
             ulIndex++;
         }
 
@@ -1739,6 +1785,14 @@ BaseType_t xPortStartScheduler( void ) /* PRIVILEGED_FUNCTION */
     portNVIC_SHPR3_REG |= portNVIC_PENDSV_PRI;
     portNVIC_SHPR3_REG |= portNVIC_SYSTICK_PRI;
     portNVIC_SHPR2_REG = 0;
+
+    #if( ( configENABLE_PAC == 1 ) || ( configENABLE_BTI == 1 ) )
+    {
+        /* Set the CONTROL register value based on PACBTI security feature
+         * configuration before starting the first task. */
+        ( void) prvConfigurePACBTI( pdTRUE );
+    }
+    #endif /* configENABLE_PAC == 1 || configENABLE_BTI == 1 */
 
     #if ( configENABLE_MPU == 1 )
     {
@@ -2157,4 +2211,39 @@ BaseType_t xPortIsInsideInterrupt( void )
     #endif /* #if ( configENABLE_ACCESS_CONTROL_LIST == 1 ) */
 
 #endif /* #if ( ( configENABLE_MPU == 1 ) && ( configUSE_MPU_WRAPPERS_V1 == 0 ) ) */
+/*-----------------------------------------------------------*/
+
+#if( ( configENABLE_PAC == 1 ) || ( configENABLE_BTI == 1 ) )
+
+    static uint32_t prvConfigurePACBTI( BaseType_t xWriteControlRegister )
+    {
+        uint32_t ulControl = 0x0;
+
+        /* Ensure that PACBTI is implemented. */
+        configASSERT( portID_ISAR5_REG != 0x0 );
+
+        /* Enable UsageFault exception. */
+        portSCB_SYS_HANDLER_CTRL_STATE_REG |= portSCB_USG_FAULT_ENABLE_BIT;
+
+        #if( configENABLE_PAC == 1 )
+        {
+            ulControl |= ( portCONTROL_UPAC_EN | portCONTROL_PAC_EN );
+        }
+        #endif
+
+        #if( configENABLE_BTI == 1 )
+        {
+            ulControl |= ( portCONTROL_UBTI_EN | portCONTROL_BTI_EN );
+        }
+        #endif
+
+        if( xWriteControlRegister == pdTRUE )
+        {
+            __asm volatile ( "msr control, %0" : : "r" ( ulControl ) );
+        }
+
+        return ulControl;
+    }
+
+#endif /* configENABLE_PAC == 1 || configENABLE_BTI == 1 */
 /*-----------------------------------------------------------*/

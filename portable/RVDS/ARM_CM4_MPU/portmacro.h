@@ -97,7 +97,7 @@ typedef unsigned long    UBaseType_t;
 #define portMPU_RASR_TEX_S_C_B_LOCATION                          ( 16UL )
 #define portMPU_RASR_TEX_S_C_B_MASK                              ( 0x3FUL )
 
-/* MPU settings that can be overriden in FreeRTOSConfig.h. */
+/* MPU settings that can be overridden in FreeRTOSConfig.h. */
 #ifndef configTOTAL_MPU_REGIONS
     /* Define to 8 for backward compatibility. */
     #define configTOTAL_MPU_REGIONS    ( 8UL )
@@ -334,7 +334,7 @@ extern void vPortExitCritical( void );
 #define portTASK_FUNCTION( vFunction, pvParameters )          void vFunction( void * pvParameters )
 /*-----------------------------------------------------------*/
 
-#ifdef configASSERT
+#if ( configASSERT_DEFINED == 1 )
     void vPortValidateInterruptPriority( void );
     #define portASSERT_IF_INTERRUPT_PRIORITY_INVALID()    vPortValidateInterruptPriority()
 #endif

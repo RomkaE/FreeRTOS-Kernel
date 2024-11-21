@@ -137,7 +137,7 @@ extern void vClearInterruptMask( uint32_t ulMask ) /* __attribute__(( naked )) P
     #define portPRIVILEGE_BIT         ( 0x0UL )
 #endif /* configENABLE_MPU */
 
-/* MPU settings that can be overriden in FreeRTOSConfig.h. */
+/* MPU settings that can be overridden in FreeRTOSConfig.h. */
 #ifndef configTOTAL_MPU_REGIONS
     /* Define to 8 for backward compatibility. */
     #define configTOTAL_MPU_REGIONS    ( 8UL )
@@ -312,7 +312,7 @@ extern void vClearInterruptMask( uint32_t ulMask ) /* __attribute__(( naked )) P
  * @brief Validate priority of ISRs that are allowed to call FreeRTOS
  * system calls.
  */
-#ifdef configASSERT
+#if ( configASSERT_DEFINED == 1 )
     #if ( portHAS_ARMV8M_MAIN_EXTENSION == 1 )
         void vPortValidateInterruptPriority( void );
         #define portASSERT_IF_INTERRUPT_PRIORITY_INVALID()    vPortValidateInterruptPriority()

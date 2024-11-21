@@ -65,7 +65,7 @@
 #define tskMPU_REGION_EXECUTE_NEVER                   ( 1U << 2U )
 #define tskMPU_REGION_NORMAL_MEMORY                   ( 1U << 3U )
 #define tskMPU_REGION_DEVICE_MEMORY                   ( 1U << 4U )
-#if ( portARMV8M_MINOR_VERSION >= 1 )
+#if defined( portARMV8M_MINOR_VERSION ) && ( portARMV8M_MINOR_VERSION >= 1 )
     #define tskMPU_REGION_PRIVILEGED_EXECUTE_NEVER    ( 1U << 5U )
 #endif /* portARMV8M_MINOR_VERSION >= 1 */
 
@@ -2372,7 +2372,7 @@ char * pcTaskGetName( TaskHandle_t xTaskToQuery ) PRIVILEGED_FUNCTION;
  *
  * WARN: This function assumes that the pcWriteBuffer is of length
  * configSTATS_BUFFER_MAX_LENGTH. This function is there only for
- * backward compatiblity. New applications are recommended to use
+ * backward compatibility. New applications are recommended to use
  * vTaskGetRunTimeStatistics and supply the length of the pcWriteBuffer
  * explicitly.
  *

@@ -1172,7 +1172,7 @@
     #endif /* if ( INCLUDE_uxTaskGetStackHighWaterMark2 == 1 ) */
 /*-----------------------------------------------------------*/
 
-    #if ( ( INCLUDE_xTaskGetCurrentTaskHandle == 1 ) || ( configUSE_MUTEXES == 1 ) )
+    #if ( ( INCLUDE_xTaskGetCurrentTaskHandle == 1 ) || ( configUSE_RECURSIVE_MUTEXES == 1 ) )
 
         TaskHandle_t MPU_xTaskGetCurrentTaskHandleImpl( void ) PRIVILEGED_FUNCTION;
 
@@ -1197,7 +1197,7 @@
             return xExternalTaskHandle;
         }
 
-    #endif /* if ( ( INCLUDE_xTaskGetCurrentTaskHandle == 1 ) || ( configUSE_MUTEXES == 1 ) ) */
+    #endif /* if ( ( INCLUDE_xTaskGetCurrentTaskHandle == 1 ) || ( configUSE_RECURSIVE_MUTEXES == 1 ) ) */
 /*-----------------------------------------------------------*/
 
     #if ( INCLUDE_xTaskGetSchedulerState == 1 )
@@ -3558,10 +3558,10 @@
     #if ( configUSE_TIMERS == 1 )
 
         void MPU_vTimerSetReloadModeImpl( TimerHandle_t xTimer,
-                                          const UBaseType_t uxAutoReload ) PRIVILEGED_FUNCTION;
+                                          const BaseType_t xAutoReload ) PRIVILEGED_FUNCTION;
 
         void MPU_vTimerSetReloadModeImpl( TimerHandle_t xTimer,
-                                          const UBaseType_t uxAutoReload ) /* PRIVILEGED_FUNCTION */
+                                          const BaseType_t xAutoReload ) /* PRIVILEGED_FUNCTION */
         {
             TimerHandle_t xInternalTimerHandle = NULL;
             int32_t lIndex;
@@ -3579,7 +3579,7 @@
 
                     if( xInternalTimerHandle != NULL )
                     {
-                        vTimerSetReloadMode( xInternalTimerHandle, uxAutoReload );
+                        vTimerSetReloadMode( xInternalTimerHandle, xAutoReload );
                     }
                 }
             }
@@ -3733,7 +3733,7 @@
 
         TimerHandle_t MPU_xTimerCreate( const char * const pcTimerName,
                                         const TickType_t xTimerPeriodInTicks,
-                                        const UBaseType_t uxAutoReload,
+                                        const BaseType_t xAutoReload,
                                         void * const pvTimerID,
                                         TimerCallbackFunction_t pxCallbackFunction ) /* PRIVILEGED_FUNCTION */
         {
@@ -3745,7 +3745,7 @@
 
             if( lIndex != -1 )
             {
-                xInternalTimerHandle = xTimerCreate( pcTimerName, xTimerPeriodInTicks, uxAutoReload, pvTimerID, MPU_TimerCallback );
+                xInternalTimerHandle = xTimerCreate( pcTimerName, xTimerPeriodInTicks, xAutoReload, pvTimerID, MPU_TimerCallback );
 
                 if( xInternalTimerHandle != NULL )
                 {
@@ -3768,7 +3768,7 @@
 
         TimerHandle_t MPU_xTimerCreateStatic( const char * const pcTimerName,
                                               const TickType_t xTimerPeriodInTicks,
-                                              const UBaseType_t uxAutoReload,
+                                              const BaseType_t xAutoReload,
                                               void * const pvTimerID,
                                               TimerCallbackFunction_t pxCallbackFunction,
                                               StaticTimer_t * pxTimerBuffer ) /* PRIVILEGED_FUNCTION */
@@ -3781,7 +3781,7 @@
 
             if( lIndex != -1 )
             {
-                xInternalTimerHandle = xTimerCreateStatic( pcTimerName, xTimerPeriodInTicks, uxAutoReload, pvTimerID, MPU_TimerCallback, pxTimerBuffer );
+                xInternalTimerHandle = xTimerCreateStatic( pcTimerName, xTimerPeriodInTicks, xAutoReload, pvTimerID, MPU_TimerCallback, pxTimerBuffer );
 
                 if( xInternalTimerHandle != NULL )
                 {
@@ -3838,27 +3838,16 @@
             BaseType_t xReturn = pdFALSE;
             TimerHandle_t xInternalTimerHandle = NULL;
             int32_t lIndex;
-            BaseType_t xIsHigherPriorityTaskWokenWriteable = pdFALSE;
 
-            if( pxHigherPriorityTaskWoken != NULL )
+            lIndex = ( int32_t ) xTimer;
+
+            if( IS_EXTERNAL_INDEX_VALID( lIndex ) != pdFALSE )
             {
-                xIsHigherPriorityTaskWokenWriteable = xPortIsAuthorizedToAccessBuffer( pxHigherPriorityTaskWoken,
-                                                                                       sizeof( BaseType_t ),
-                                                                                       tskMPU_WRITE_PERMISSION );
-            }
+                xInternalTimerHandle = MPU_GetTimerHandleAtIndex( CONVERT_TO_INTERNAL_INDEX( lIndex ) );
 
-            if( ( pxHigherPriorityTaskWoken == NULL ) || ( xIsHigherPriorityTaskWokenWriteable == pdTRUE ) )
-            {
-                lIndex = ( int32_t ) xTimer;
-
-                if( IS_EXTERNAL_INDEX_VALID( lIndex ) != pdFALSE )
+                if( xInternalTimerHandle != NULL )
                 {
-                    xInternalTimerHandle = MPU_GetTimerHandleAtIndex( CONVERT_TO_INTERNAL_INDEX( lIndex ) );
-
-                    if( xInternalTimerHandle != NULL )
-                    {
-                        xReturn = xTimerGenericCommandFromISR( xInternalTimerHandle, xCommandID, xOptionalValue, pxHigherPriorityTaskWoken, xTicksToWait );
-                    }
+                    xReturn = xTimerGenericCommandFromISR( xInternalTimerHandle, xCommandID, xOptionalValue, pxHigherPriorityTaskWoken, xTicksToWait );
                 }
             }
 
