@@ -5129,22 +5129,34 @@ BaseType_t xTaskIncrementTick( void )
                     ulTotalRunTime[ 0 ] = portGET_RUN_TIME_COUNTER_VALUE();
                 #endif
 
-                /* Add the amount of time the task has been running to the
-                 * accumulated time so far.  The time the task started running was
-                 * stored in ulTaskSwitchedInTime.  Note that there is no overflow
-                 * protection here so count values are only valid until the timer
-                 * overflows.  The guard against negative values is to protect
-                 * against suspect run time stat counter implementations - which
-                 * are provided by the application, not the kernel. */
-                if( ulTotalRunTime[ 0 ] > ulTaskSwitchedInTime[ 0 ] )
+                #if ( configCLEAR_RUN_TIME_STATS == 1 )
                 {
+                    /* In real-time statistics mode, where runtime stats are periodically cleared,
+                     * a single hardware timer overflow is valid and correctly handled by modular
+                     * arithmetic (subtraction modulo 2). For that reason, the original
+                     * condition “if (total > current)” is omitted - it would discard the overflowed
+                     * interval and distort real-time statistics. */
                     pxCurrentTCB->ulRunTimeCounter += ( ulTotalRunTime[ 0 ] - ulTaskSwitchedInTime[ 0 ] );
                 }
-                else
+                #else
                 {
-                    mtCOVERAGE_TEST_MARKER();
+                    /* Add the amount of time the task has been running to the
+                     * accumulated time so far.  The time the task started running was
+                     * stored in ulTaskSwitchedInTime.  Note that there is no overflow
+                     * protection here so count values are only valid until the timer
+                     * overflows.  The guard against negative values is to protect
+                     * against suspect run time stat counter implementations - which
+                     * are provided by the application, not the kernel. */
+                    if( ulTotalRunTime[ 0 ] > ulTaskSwitchedInTime[ 0 ] )
+                    {
+                        pxCurrentTCB->ulRunTimeCounter += ( ulTotalRunTime[ 0 ] - ulTaskSwitchedInTime[ 0 ] );
+                    }
+                    else
+                    {
+                        mtCOVERAGE_TEST_MARKER();
+                    }
                 }
-
+                #endif /* portALT_GET_RUN_TIME_COUNTER_VALUE */
                 ulTaskSwitchedInTime[ 0 ] = ulTotalRunTime[ 0 ];
             }
             #endif /* configGENERATE_RUN_TIME_STATS */
